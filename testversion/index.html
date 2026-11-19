@@ -48,37 +48,35 @@ function resetEntry(){editingId=null;$("entryForm").reset();$("entrySave").textC
 $("entryCancel").onclick=()=>{resetEntry();$("entryMessage").textContent="Bearbeitung abgebrochen."};
 function printMonth(){if(!session||!profile||profile.must_change_password)return;$("printMeta").textContent="Mitarbeiter: "+(profile.display_name||profile.username)+"  |  Benutzername: "+profile.username+"  |  Stundenlohn: "+money(profile.hourly_wage);$("printHeroMonth").textContent=$("monthLabel").textContent;$("pdfStatus").textContent="Im Druckdialog „Als PDF speichern“ wählen. Auf iPhone oder Android die Druck-/Teilen-Funktion nutzen.";window.print()}
 $("monthPdf").onclick=printMonth;
-async function sharePdf(){
-const button=$("monthShare");button.disabled=true;
-const status=$("pdfStatus");status.textContent="PDF wird vorbereitet ...";
-try{
-if(!window.jspdf){await new Promise((resolve,reject)=>{const script=document.createElement("script");script.src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js";script.onload=resolve;script.onerror=()=>reject(new Error("PDF-Bibliothek nicht erreichbar"));document.head.appendChild(script)})}
-const pdf=new window.jspdf.jsPDF({unit:"mm",format:"a4"});
-const safe=t=>String(t??"").replace(/[–—]/g,"-");
-const write=(t,x,y,size=10,bold=false)=>{pdf.setFont("helvetica",bold?"bold":"normal");pdf.setFontSize(size);pdf.text(safe(t),x,y)};
-pdf.setFillColor(21,27,33);pdf.rect(0,0,210,44,"F");
-pdf.setFillColor(255,208,0);pdf.rect(0,0,5,44,"F");
-pdf.setTextColor(255,208,0);write("UEBERSTUNDEN - MONATSREPORT",15,16,12,true);
-pdf.setTextColor(255,255,255);write($("monthLabel").textContent,15,31,22,true);
-pdf.setTextColor(21,27,33);
-write("Mitarbeiter: "+(profile.display_name||profile.username),15,55,11,true);
-write("Stundenlohn: "+money(profile.hourly_wage),15,62,10);
+function localPdfBlob(){
+const clean=v=>String(v??"").replace(/ä/g,"ae").replace(/ö/g,"oe").replace(/ü/g,"ue").replace(/Ä/g,"Ae").replace(/Ö/g,"Oe").replace(/Ü/g,"Ue").replace(/ß/g,"ss").replace(/€/g,"EUR").replace(/[^\x20-\x7e]/g,"-");
+const esc=v=>clean(v).replace(/\\/g,"\\\\").replace(/\(/g,"\\(").replace(/\)/g,"\\)");
+const streams=[];let ops=[],y=0;
+function addPage(){if(ops.length)streams.push(ops.join("\n"));ops=[];y=0}
+function rect(x,top,w,h,r,g,b){ops.push(r+" "+g+" "+b+" rg "+x+" "+(842-top-h)+" "+w+" "+h+" re f")}
+function txt(v,x,top,size=10,bold=false,color="0.09 0.12 0.15"){ops.push("BT /"+(bold?"F2":"F1")+" "+size+" Tf "+color+" rg 1 0 0 1 "+x+" "+(842-top-size)+" Tm ("+esc(v)+") Tj ET")}
+function newTablePage(){addPage();rect(0,0,595,60,.09,.12,.15);txt("UEBERSTUNDEN - MONATSREPORT",40,15,14,true,"1 .82 0");txt($("monthLabel").textContent,40,34,13,true,"1 1 1");y=78;tableHeader()}
+function tableHeader(){rect(35,y,525,25,.09,.12,.15);["Datum","Zeitraum","REG / Kennzeichen","Stunden","Betrag"].forEach((v,i)=>txt(v,[41,126,228,424,489][i],y+7,9,true,"1 1 1"));y+=30}
+rect(0,0,595,125,.09,.12,.15);rect(0,0,9,125,1,.82,0);txt("UEBERSTUNDEN - MONATSREPORT",40,22,16,true,"1 .82 0");txt($("monthLabel").textContent,40,54,27,true,"1 1 1");txt("Uebersicht der Arbeitszeiten und Zuschlaege",40,96,11,false,"1 1 1");
+txt("Mitarbeiter: "+(profile.display_name||profile.username),40,142,12,true);txt("Stundenlohn: "+money(profile.hourly_wage),40,163,10);
 const sums={h:0,base:0,b25:0,b25f:0,b40:0,b50:0,sbv:0,total:0};
-for(const entry of entryCache){const c=calculateEntry(entry);for(const key of Object.keys(sums))sums[key]+=c[key]}
-const metrics=[["Gesamtverdienst",money(sums.total)],["Arbeitsstunden",sums.h.toFixed(2)+" h"],["Grundlohn",money(sums.base)],["25 % steuerpflichtig",money(sums.b25)],["25 % steuerfrei",money(sums.b25f)],["40 % steuerfrei",money(sums.b40)],["50 % Sonntag/Feiertag",money(sums.b50)],["Bereitschaft",money(sums.sbv)],["Eintraege",String(entryCache.length)]];
-for(let i=0;i<metrics.length;i++){const x=15+(i%3)*62,y=72+Math.floor(i/3)*23;pdf.setFillColor(i===0?255:243,i===0?248:245,i===0?215:247);pdf.roundedRect(x,y,58,20,2,2,"F");write(metrics[i][0],x+3,y+7,8);write(metrics[i][1],x+3,y+16,13,true)}
-let y=154;write("Eintraege im Monat",15,y,14,true);y+=8;
-const header=()=>{pdf.setFillColor(21,27,33);pdf.rect(15,y-5,180,10,"F");pdf.setTextColor(255,255,255);write("Datum",17,y+1,8,true);write("Zeit",45,y+1,8,true);write("REG / Kennzeichen",79,y+1,8,true);write("Stunden",145,y+1,8,true);write("Betrag",168,y+1,8,true);pdf.setTextColor(21,27,33);y+=12};header();
-for(const e of entryCache){if(y>270){pdf.addPage();y=20;header()}const c=calculateEntry(e);write(e.work_date,17,y,8);write((e.start_time||"").slice(0,5)+"-"+(e.end_time||"").slice(0,5),45,y,8);write(safe(e.reg_number+" / "+e.license_plate).slice(0,27),79,y,8);write(c.h.toFixed(2)+" h",145,y,8);write(money(c.total),168,y,8);pdf.setDrawColor(220,220,220);pdf.line(15,y+3,195,y+3);y+=11}
-if(y>278){pdf.addPage();y=20}
-write("Testversion - Unverbindliche Berechnung, keine Lohnabrechnung.",15,y+10,8);
-const blob=pdf.output("blob"),filename="Ueberstunden_"+profile.username+"_"+selectedMonth+".pdf";
-const file=new File([blob],filename,{type:"application/pdf"});
-if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){
-try{await navigator.share({files:[file],title:"Überstunden "+$("monthLabel").textContent});status.textContent="Teilen-Menü geöffnet.";return}catch(err){if(err.name==="AbortError"){status.textContent="Teilen abgebrochen.";return}throw err}
-}
-const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);status.textContent="PDF-Download gestartet. Falls das nicht klappt, nutze PDF / Drucken.";
-}catch(err){status.textContent="PDF konnte nicht erstellt werden: "+err.message+". Bitte PDF / Drucken verwenden."}finally{button.disabled=false}
+for(const e of entryCache){const c=calculateEntry(e);for(const k of Object.keys(sums))sums[k]+=c[k]}
+const metrics=[["Gesamtverdienst",money(sums.total)],["Arbeitsstunden",sums.h.toFixed(2)+" h"],["Grundlohn",money(sums.base)],["25 % steuerpflichtig",money(sums.b25)],["25 % steuerfrei",money(sums.b25f)],["40 % steuerfrei",money(sums.b40)],["50 % Sonn-/Feiertag",money(sums.b50)],["Bereitschaft",money(sums.sbv)],["Eintraege",String(entryCache.length)]];
+metrics.forEach(([name,val],i)=>{const x=35+i%3*179,t=192+Math.floor(i/3)*72;rect(x,t,169,64,i===0?1:.95,i===0?.97:.96,i===0?.82:.97);txt(name,x+9,t+9,10);txt(val,x+9,t+30,16,true)});
+txt("Eintraege im Monat",35,426,16,true);y=457;tableHeader();
+entryCache.forEach(e=>{if(y>765)newTablePage();const c=calculateEntry(e),fields=[e.work_date,(e.start_time||"").slice(0,5)+"-"+(e.end_time||"").slice(0,5),String(e.reg_number||"")+" / "+String(e.license_plate||""),c.h.toFixed(2)+" h",money(c.total)];if((y/30|0)%2===0)rect(35,y,525,26,.96,.97,.98);fields.forEach((v,i)=>txt(i===2?String(v).slice(0,30):v,[41,126,228,424,489][i],y+7,9));y+=29});
+if(y>787)addPage();txt("Testversion - Unverbindliche Berechnung, keine Lohnabrechnung.",35,Math.min(y+16,795),9);
+streams.push(ops.join("\n"));
+const objects=[null],add=v=>(objects.push(v),objects.length-1);const catalog=add(""),pages=add(""),font=add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),fontBold=add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>");const pageIds=[];
+for(const stream of streams){const bytes=new TextEncoder().encode(stream);const content=add("<< /Length "+bytes.length+" >>\nstream\n"+stream+"\nendstream");const page=add("<< /Type /Page /Parent "+pages+" 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 "+font+" 0 R /F2 "+fontBold+" 0 R >> >> /Contents "+content+" 0 R >>");pageIds.push(page)}
+objects[catalog]="<< /Type /Catalog /Pages "+pages+" 0 R >>";objects[pages]="<< /Type /Pages /Kids ["+pageIds.map(id=>id+" 0 R").join(" ")+"] /Count "+pageIds.length+" >>";
+let pdf="%PDF-1.4\n",offsets=[0];for(let i=1;i<objects.length;i++){offsets.push(pdf.length);pdf+=i+" 0 obj\n"+objects[i]+"\nendobj\n"}const xref=pdf.length;pdf+="xref\n0 "+objects.length+"\n0000000000 65535 f \n";for(let i=1;i<objects.length;i++)pdf+=String(offsets[i]).padStart(10,"0")+" 00000 n \n";pdf+="trailer\n<< /Size "+objects.length+" /Root "+catalog+" 0 R >>\nstartxref\n"+xref+"\n%%EOF";return new Blob([pdf],{type:"application/pdf"})}
+async function sharePdf(){
+const button=$("monthShare"),status=$("pdfStatus");button.disabled=true;status.textContent="PDF wird erstellt ...";
+try{const blob=localPdfBlob(),filename="Ueberstunden_"+profile.username+"_"+selectedMonth+".pdf",file=new File([blob],filename,{type:"application/pdf"});
+if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title:"Ueberstunden "+$("monthLabel").textContent});status.textContent="Teilen-Menue geoeffnet.";return}catch(e){if(e.name==="AbortError"){status.textContent="Teilen abgebrochen.";return}throw e}}
+const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);status.textContent="PDF-Download gestartet.";
+}catch(e){status.textContent="PDF konnte nicht erstellt werden: "+e.message}finally{button.disabled=false}
 }
 $("monthShare").onclick=sharePdf;
 
