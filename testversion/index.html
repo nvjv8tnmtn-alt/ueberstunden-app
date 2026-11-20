@@ -30,7 +30,36 @@ body>header{display:none!important}
 <section id="entriesCard" class="card" hidden><h2>Überstunden erfassen</h2><p class="muted">Nur Testeinträge verwenden. Die Zuschläge werden automatisch berechnet. Die PDF-Druckansicht ist verfügbar. Bitte nur Testeinträge verwenden.</p><form id="entryForm"><label>Datum<input id="workDate" type="date" required></label><label>Beginn<input id="workStart" type="time"></label><label>Ende<input id="workEnd" type="time"></label><label><input id="workStandby" type="checkbox" style="width:auto;display:inline"> Bereitschaft</label><label>REG-Nummer<input id="workReg" maxlength="100"></label><label>Kennzeichen<input id="workPlate" maxlength="100"></label><label>Notizen<input id="workNotes" maxlength="1000"></label><p class="muted">Die 25-%-Zuschläge werden wie in der bisherigen App automatisch anhand der Uhrzeit berechnet.</p><button id="entrySave" type="submit">Online speichern</button><button id="entryCancel" type="button" hidden style="margin-left:8px;background:#35424d;color:#fff">Bearbeiten abbrechen</button></form><p id="entryMessage" class="status" role="status"></p><button id="entryRefresh" type="button">Einträge aktualisieren</button></section><section id="monthCard" class="card" hidden><h2>Monatsübersicht</h2><div class="monthbar"><button id="monthPrev" type="button" aria-label="Vorheriger Monat">‹</button><strong id="monthLabel"></strong><button id="monthNext" type="button" aria-label="Nächster Monat">›</button></div><div id="printHero" hidden><div class="printEyebrow">ÜBERSTUNDEN · MONATSREPORT</div><div id="printHeroMonth"></div><div class="printHeroSub">Übersicht der erfassten Arbeitszeiten und Zuschläge</div></div><div id="printMeta" hidden></div><div class="summary" id="monthSummary"></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"><button id="monthPdf" type="button">PDF / Drucken</button><button id="monthShare" type="button">PDF teilen / speichern</button></div><p id="pdfStatus" class="muted" role="status"></p><h3>Einträge im Monat</h3><div id="entryList"></div><table id="printTable" hidden><thead><tr><th>Datum</th><th>Zeitraum</th><th>REG / Kennzeichen</th><th>Stunden</th><th>Betrag</th></tr></thead><tbody id="printRows"></tbody></table><div id="printFooter" hidden>Testversion · Unverbindliche Berechnung, keine Lohnabrechnung. Angaben bitte prüfen.</div></section><section id="welcomeCard" class="card" hidden><h2>Angemeldet</h2><p id="welcome"></p><p class="muted">Die Anmeldung funktioniert. Du kannst jetzt unten einen Testeintrag online speichern. Bitte noch keine echten Arbeitszeiten erfassen.</p><button id="logout">Abmelden</button></section></main><script>
 "use strict";
 const BASE="https://stkbvwxewedjpfhmtmzx.supabase.co",KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN0a2J2d3hld2VkanBmaG10bXp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUwNzYxNzIsImV4cCI6MjExMDY1MjE3Mn0.iywRajexZz3rJn4Oh9UmbGxNKN88wqlCbiynfzzob7A";const $=id=>document.getElementById(id);let session=null,profile=null,entryCache=[],editingId=null,selectedMonth=new Date().getFullYear()+"-"+String(new Date().getMonth()+1).padStart(2,"0");
-async function call(path,options={}){const r=await fetch(BASE+path,{...options,headers:{"apikey":KEY,"Content-Type":"application/json",...(session?{"Authorization":"Bearer "+session.access_token}:{}),...(options.headers||{})},cache:"no-store"});const data=await r.json().catch(()=>({}));if(!r.ok)throw Error(data.error_description||data.msg||data.message||"HTTP "+r.status);return data}
+let refreshInFlight=null;
+async function renewSession(){
+  if(!session?.refresh_token)throw Error("Sitzung abgelaufen. Bitte erneut anmelden.");
+  if(!refreshInFlight){
+    refreshInFlight=(async()=>{
+      const response=await fetch(BASE+"/auth/v1/token?grant_type=refresh_token",{
+        method:"POST",headers:{"apikey":KEY,"Content-Type":"application/json"},
+        body:JSON.stringify({refresh_token:session.refresh_token}),cache:"no-store"
+      });
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok||!data.access_token)throw Error("Sitzung abgelaufen. Bitte abmelden und erneut anmelden.");
+      session=data;
+      return data;
+    })().finally(()=>{refreshInFlight=null});
+  }
+  return refreshInFlight;
+}
+async function call(path,options={}){
+  const authRequest=path.startsWith("/auth/v1/token")||path==="/auth/v1/logout";
+  if(session&&!authRequest&&session.expires_at&&Date.now()/1000>session.expires_at-90)await renewSession();
+  const request=()=>fetch(BASE+path,{...options,headers:{"apikey":KEY,"Content-Type":"application/json",...(session?{"Authorization":"Bearer "+session.access_token}:{}),...(options.headers||{})},cache:"no-store"});
+  let r=await request();
+  if(r.status===401&&session&&!authRequest){
+    await renewSession();
+    r=await request();
+  }
+  const data=await r.json().catch(()=>({}));
+  if(!r.ok)throw Error(data.error_description||data.msg||data.message||"HTTP "+r.status);
+  return data;
+}
 function view(name){for(const id of ["loginCard","changeCard","welcomeCard"])$(id).hidden=id!==name;$("entriesCard").hidden=name!=="welcomeCard";$("monthCard").hidden=name!=="welcomeCard"}
 async function signout(){if(session){try{await call("/auth/v1/logout",{method:"POST"})}catch{}}session=null;profile=null;editingId=null;entryCache=[];$("password").value="";$("newPassword").value="";$("repeatPassword").value="";view("loginCard")}
 $("login").addEventListener("submit",async e=>{e.preventDefault();const btn=$("loginBtn");btn.disabled=true;$("loginMessage").textContent="Anmeldung wird geprüft …";try{const username=$("username").value.trim().toLowerCase();if(!/^[a-z0-9._-]{3,40}$/.test(username))throw Error("Ungültiger Benutzername.");session=await call("/auth/v1/token?grant_type=password",{method:"POST",body:JSON.stringify({email:username+"@staff.invalid",password:$("password").value})});const user=await call("/auth/v1/user");const rows=await call("/rest/v1/employee_profiles?select=user_id,username,display_name,role,active,must_change_password,hourly_wage&user_id=eq."+encodeURIComponent(user.id));const p=rows[0];if(!p||!p.active||p.role!=="employee"||p.username!==username){await signout();throw Error("Kein aktives Mitarbeiterkonto gefunden.")}$("password").value="";profile=p;if(p.must_change_password){view("changeCard")}else{$("welcome").textContent="Hallo "+p.display_name+"!";view("welcomeCard");await loadEntries()}$("loginMessage").textContent=""}catch(err){$("loginMessage").textContent="Anmeldung fehlgeschlagen: "+err.message}finally{btn.disabled=false}});
