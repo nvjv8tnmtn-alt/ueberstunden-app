@@ -46,7 +46,63 @@ function eur(n){return n.toLocaleString("de-DE",{style:"currency",currency:"EUR"
 function refreshSuggestions(){let rs=[...new Set(E.map(e=>e.r).filter(Boolean))].sort(),ps=[...new Set(E.map(e=>e.p).filter(Boolean))].sort();if($("regList"))$("regList").innerHTML=rs.map(v=>"<option value=\""+String(v).replaceAll('"',"&quot;")+"\"></option>").join("");if($("plateList"))$("plateList").innerHTML=ps.map(v=>"<option value=\""+String(v).replaceAll('"',"&quot;")+"\"></option>").join("")}function render(){refreshSuggestions();let z={h:0,base:0,b25:0,b25f:0,b40:0,b50:0,sbv:0,t:0},mf=$("monthFilter")?$("monthFilter").value:"",V=E.map((e,i)=>({e,i})).filter(o=>!mf||o.e.d.slice(0,7)===mf);if($("monthLabel"))$("monthLabel").textContent=mf?"– "+new Date(mf+"-01T12:00").toLocaleDateString("de-DE",{month:"long",year:"numeric"}):"– Alle Monate";$("rows").innerHTML=V.map(({e,i})=>{let x=calc(e);Object.keys(z).forEach(k=>z[k]+=x[k]);return "<tr><td>"+e.d+(holiday(e.d)?" 🎉":"")+"</td><td>"+(e.s&&e.e?e.s+"–"+e.e:"Bereitschaft")+"</td><td>"+(e.r||"")+"</td><td>"+(e.p||"")+"</td><td>"+x.h.toFixed(2)+"</td><td>"+(e.n||"")+"</td><td>"+eur(x.t)+"<details class=\"entry-breakdown\"><summary>Zuschläge anzeigen</summary><div class=\"breakdown-line\"><span>Grundlohn</span><strong>"+eur(x.base)+"</strong></div><div class=\"breakdown-line\"><span>25 % steuerpflichtig</span><strong>"+eur(x.b25)+"</strong></div><div class=\"breakdown-line\"><span>25 % steuerfrei</span><strong>"+eur(x.b25f)+"</strong></div><div class=\"breakdown-line\"><span>40 % steuerfrei</span><strong>"+eur(x.b40)+"</strong></div><div class=\"breakdown-line\"><span>50 % Sonntag/Feiertag</span><strong>"+eur(x.b50)+"</strong></div><div class=\"breakdown-line\"><span>Bereitschaft</span><strong>"+eur(x.sbv)+"</strong></div></details></td><td><button onclick='editEntry("+i+")' title='Bearbeiten'>✏️</button><button onclick='copyEntry("+i+")' title='Kopieren'>📋</button><button onclick='del("+i+")' title='Löschen'>×</button></td></tr>"}).join("");$("sumHours").textContent=z.h.toFixed(2)+" h";$("sumBase").textContent=eur(z.base);$("sum25").textContent=eur(z.b25);$("sum25f").textContent=eur(z.b25f);$("sum40").textContent=eur(z.b40);$("sum50").textContent=eur(z.b50);$("sumSb").textContent=eur(z.sbv);$("total").textContent=eur(z.t)}
 function editEntry(i){let e=E[i];$("date").value=e.d;setTime("start",e.s||"");setTime("end",e.e||"");$("reg").value=e.r||"";$("plate").value=e.p||"";$("sb").value=e.sb?"1":"0";$("notes").value=e.n||"";$("editIndex").value=i;$("save").textContent="Änderung speichern";$("cancelEdit").style.display="block";scrollTo({top:0,behavior:"smooth"})}
 function resetEdit(){$("editIndex").value=-1;$("save").textContent="Eintrag speichern";$("cancelEdit").style.display="none";["date","reg","plate","notes"].forEach(x=>$(x).value="");setTime("start","");setTime("end","");$("sb").value="0";}
-$("cancelEdit").onclick=resetEdit;$("pdfExport").onclick=async function(){try{if(!window.jspdf||!window.jspdf.jsPDF)throw new Error("PDF-Bibliothek nicht geladen");let doc=new window.jspdf.jsPDF({orientation:"landscape",unit:"mm",format:"a4"}),mf=$("monthFilter")?$("monthFilter").value:"",V=E.filter(e=>!mf||e.d.slice(0,7)===mf),z={h:0,base:0,b25:0,b25f:0,b40:0,b50:0,sbv:0,t:0};V.forEach(e=>{let x=calc(e);Object.keys(z).forEach(k=>z[k]+=x[k])});let title=mf?"Überstunden – "+new Date(mf+"-01T12:00").toLocaleDateString("de-DE",{month:"long",year:"numeric"}):"Überstunden – Alle Monate";doc.setFontSize(18);doc.text(title,14,16);doc.setFontSize(10);doc.text("Kevin Seel",14,23);doc.text("Gesamtstunden: "+z.h.toFixed(2)+" h   Grundlohn: "+eur(z.base)+"   Gesamt: "+eur(z.t),14,30);doc.text("25 % stpfl.: "+eur(z.b25)+"   25 % stfrei: "+eur(z.b25f)+"   40 % stfrei: "+eur(z.b40)+"   50 % So./Feiertag: "+eur(z.b50)+"   Bereitschaft: "+eur(z.sbv),14,36);let body=V.map(e=>{let x=calc(e);return[e.d,e.s&&e.e?e.s+" - "+e.e:"Bereitschaft",e.r||"",e.p||"",x.h.toFixed(2),e.n||"",eur(x.t)]});if(typeof doc.autoTable!=="function")throw new Error("PDF-Tabelle nicht geladen");doc.autoTable({startY:42,head:[["Datum","Zeit","REG","Kennzeichen","Std.","Notizen","Gesamt"]],body:body,styles:{fontSize:8,cellPadding:2},headStyles:{fillColor:[242,185,0],textColor:[0,0,0]}});let blob=doc.output("blob"),name="ueberstunden-"+(mf||new Date().toISOString().slice(0,10))+".pdf";try{let file=new File([blob],name,{type:"application/pdf"});if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:title});return}}catch(e){if(e&&e.name==="AbortError")return}let a=document.createElement("a"),url=URL.createObjectURL(blob);a.href=url;a.download=name;a.style.display="none";document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(url);a.remove()},1500)}catch(e){alert("PDF konnte nicht erstellt werden. Bitte Internetverbindung prüfen und die App einmal neu laden.")}};
+$("cancelEdit").onclick=resetEdit;$("pdfExport").onclick=async function(){
+try{
+if(!window.jspdf||!window.jspdf.jsPDF)throw Error("PDF-Bibliothek nicht geladen");
+const doc=new window.jspdf.jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
+const mf=$("monthFilter")?.value||"",items=E.filter(e=>!mf||e.d.slice(0,7)===mf);
+const month=mf?new Date(mf+"-01T12:00").toLocaleDateString("de-DE",{month:"long",year:"numeric"}):"Alle Monate";
+const sums={h:0,base:0,b25:0,b25f:0,b40:0,b50:0,sbv:0,t:0};
+items.forEach(e=>{const c=calc(e);Object.keys(sums).forEach(k=>sums[k]+=c[k])});
+const gold=[255,209,0],dark=[23,31,40],gray=[85,92,100];
+function txt(value,x,y,size=9,bold=false,color=dark){
+doc.setFont("helvetica",bold?"bold":"normal");doc.setFontSize(size);doc.setTextColor(...color);doc.text(String(value),x,y)}
+function header(continuation=false){
+doc.setFillColor(...dark);doc.rect(0,0,210,continuation?28:44,"F");
+doc.setFillColor(...gold);doc.rect(0,0,3,continuation?28:44,"F");
+txt("UEBERSTUNDEN - MONATSREPORT",13,12,13,true,gold);
+txt(month,13,continuation?22:29,continuation?11:19,true,[255,255,255]);
+}
+header();
+txt("Mitarbeiter: Kevin Seel",13,53,11,true);
+txt("Stundenlohn: "+eur(+$("wage").value||0),13,60,9);
+const metrics=[["Gesamtverdienst",eur(sums.t)],["Arbeitsstunden",sums.h.toFixed(2)+" h"],["Grundlohn",eur(sums.base)],["25 % steuerpflichtig",eur(sums.b25)],["25 % steuerfrei",eur(sums.b25f)],["40 % steuerfrei",eur(sums.b40)],["50 % Sonntag/Feiertag",eur(sums.b50)],["Bereitschaft",eur(sums.sbv)],["Eintraege",String(items.length)]];
+metrics.forEach(([label,value],i)=>{
+const x=13+(i%3)*62,y=68+Math.floor(i/3)*23;
+doc.setFillColor(i===0?255:246,i===0?247:247,i===0?209:248);doc.roundedRect(x,y,59,20,1.5,1.5,"F");
+txt(label,x+3,y+7,7);txt(value,x+3,y+15,11,true)
+});
+txt("Eintraege im Monat",13,145,13,true);
+let y=153;
+function tableHead(){
+doc.setFillColor(...dark);doc.rect(13,y,184,10,"F");
+txt("Datum",16,y+6.5,8,true,[255,255,255]);
+txt("Zeitraum",47,y+6.5,8,true,[255,255,255]);
+txt("REG / Kennzeichen",87,y+6.5,8,true,[255,255,255]);
+txt("Stunden",153,y+6.5,8,true,[255,255,255]);
+txt("Betrag",174,y+6.5,8,true,[255,255,255]);y+=12;
+}
+tableHead();
+items.forEach((e,i)=>{
+if(y+27>278){doc.addPage();header(true);y=36;tableHead()}
+const c=calc(e);
+if(i%2===0){doc.setFillColor(246,247,248);doc.rect(13,y,184,27,"F")}
+txt(e.d,16,y+6,8);
+txt(e.s&&e.e?e.s+"-"+e.e:"Bereitschaft",47,y+6,8);
+txt((String(e.r||"")+" / "+String(e.p||"")).slice(0,27),87,y+6,8);
+txt(c.h.toFixed(2)+" h",153,y+6,8);
+txt(eur(c.t),174,y+6,8);
+txt("Grundlohn: "+eur(c.base)+"  |  25 % stpfl.: "+eur(c.b25)+"  |  25 % stfrei: "+eur(c.b25f),16,y+15,7);
+txt("40 % stfrei: "+eur(c.b40)+"  |  50 % So./Feiertag: "+eur(c.b50)+"  |  Bereitschaft: "+eur(c.sbv),16,y+22,7);
+y+=28;
+});
+if(y+12>285){doc.addPage();y=18}
+txt("Unverbindliche Berechnung, keine Lohnabrechnung.",13,y+6,8,false,gray);
+const blob=doc.output("blob"),name="ueberstunden-"+(mf||new Date().toISOString().slice(0,10))+".pdf";
+try{const file=new File([blob],name,{type:"application/pdf"});if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:"Ueberstunden "+month});return}}catch(e){if(e?.name==="AbortError")return}
+const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+}catch(e){alert("PDF konnte nicht erstellt werden: "+e.message)}
+};
 async function downloadFile(name,type,data){let blob=new Blob([data],{type:type});try{let file=new File([blob],name,{type:type});if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:name});return}}catch(e){if(e&&e.name==="AbortError")return}let a=document.createElement("a"),url=URL.createObjectURL(blob);a.href=url;a.download=name;a.style.display="none";document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(url);a.remove()},1500)}
 $("jsonExport").onclick=function(){downloadFile("ueberstunden-backup-"+new Date().toISOString().slice(0,10)+".json","application/json",JSON.stringify({entries:E,settings:cfg},null,2))};$("jsonImportBtn").onclick=()=>$("jsonImport").click();$("jsonImport").onchange=async function(){let f=this.files&&this.files[0];if(!f)return;try{let d=JSON.parse(await f.text());if(!d||!Array.isArray(d.entries))throw new Error();if(!confirm("Backup wiederherstellen? Die aktuell gespeicherten Einträge werden ersetzt."))return;E=d.entries;cfg=d.settings&&typeof d.settings==="object"?d.settings:{};localStorage.setItem("entries",JSON.stringify(E));localStorage.setItem("cfg",JSON.stringify(cfg));S.forEach(x=>{if(cfg[x]!=null)$(x).value=cfg[x]});render();alert("Backup wurde wiederhergestellt.")}catch(e){alert("Die Backup-Datei konnte nicht gelesen werden.")}finally{this.value=""}};
 $("csvExport").onclick=function(){let q=v=>'"'+String(v??"").replaceAll('"','""')+'"';let rows=[["Datum","Beginn","Ende","REG-Nummer","Kennzeichen","Bereitschaft","25% steuerfrei Stunden","Notizen","Gesamt EUR"]].concat(E.map(e=>{let x=calc(e);return[e.d,e.s,e.e,e.r,e.p,e.sb?"Ja":"Nein",e.f||0,e.n||"",x.t.toFixed(2)]}));downloadFile("ueberstunden-"+new Date().toISOString().slice(0,10)+".csv","text/csv;charset=utf-8","\ufeff"+rows.map(r=>r.map(q).join(";")).join("\n"))};
