@@ -96,7 +96,15 @@ for(const e of entryCache){const c=calculateEntry(e);for(const k of Object.keys(
 const metrics=[["Gesamtverdienst",money(sums.total)],["Arbeitsstunden",sums.h.toFixed(2)+" h"],["Grundlohn",money(sums.base)],["25 % steuerpflichtig",money(sums.b25)],["25 % steuerfrei",money(sums.b25f)],["40 % steuerfrei",money(sums.b40)],["50 % Sonn-/Feiertag",money(sums.b50)],["Bereitschaft",money(sums.sbv)],["Eintraege",String(entryCache.length)]];
 metrics.forEach(([name,val],i)=>{const x=35+i%3*179,t=192+Math.floor(i/3)*72;rect(x,t,169,64,i===0?1:.95,i===0?.97:.96,i===0?.82:.97);txt(name,x+9,t+9,10);txt(val,x+9,t+30,16,true)});
 txt("Eintraege im Monat",35,426,16,true);y=457;tableHeader();
-entryCache.forEach(e=>{if(y>765)newTablePage();const c=calculateEntry(e),fields=[e.work_date,(e.start_time||"").slice(0,5)+"-"+(e.end_time||"").slice(0,5),String(e.reg_number||"")+" / "+String(e.license_plate||""),c.h.toFixed(2)+" h",money(c.total)];if((y/30|0)%2===0)rect(35,y,525,26,.96,.97,.98);fields.forEach((v,i)=>txt(i===2?String(v).slice(0,30):v,[41,126,228,424,489][i],y+7,9));y+=29});
+entryCache.forEach((e,index)=>{
+if(y>715)newTablePage();
+const c=calculateEntry(e),fields=[e.work_date,(e.start_time||"").slice(0,5)+"-"+(e.end_time||"").slice(0,5),String(e.reg_number||"")+" / "+String(e.license_plate||""),c.h.toFixed(2)+" h",money(c.total)];
+if(index%2===0)rect(35,y,525,69,.96,.97,.98);
+fields.forEach((v,i)=>txt(i===2?String(v).slice(0,30):v,[41,126,228,424,489][i],y+6,9));
+txt("Grundlohn: "+money(c.base)+"  |  25% steuerpflichtig: "+money(c.b25)+"  |  25% steuerfrei: "+money(c.b25f),41,y+26,9);
+txt("40% steuerfrei: "+money(c.b40)+"  |  50% Sonntag/Feiertag: "+money(c.b50)+"  |  Bereitschaft: "+money(c.sbv),41,y+43,9);
+y+=72;
+});
 if(y>787)addPage();txt("Testversion - Unverbindliche Berechnung, keine Lohnabrechnung.",35,Math.min(y+16,795),9);
 streams.push(ops.join("\n"));
 const objects=[null],add=v=>(objects.push(v),objects.length-1);const catalog=add(""),pages=add(""),font=add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),fontBold=add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>");const pageIds=[];
