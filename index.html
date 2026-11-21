@@ -84,9 +84,12 @@ txt("Betrag",174,y+6.5,8,true,[255,255,255]);y+=12;
 }
 tableHead();
 items.forEach((e,i)=>{
-if(y+27>278){doc.addPage();header(true);y=36;tableHead()}
 const c=calc(e);
-if(i%2===0){doc.setFillColor(246,247,248);doc.rect(13,y,184,27,"F")}
+const note=String(e.n||"").trim();
+const noteLines=note?doc.splitTextToSize("Notizen: "+note,176):[];
+const rowHeight=28+noteLines.length*4.2;
+if(y+rowHeight>278){doc.addPage();header(true);y=36;tableHead()}
+if(i%2===0){doc.setFillColor(246,247,248);doc.rect(13,y,184,rowHeight,"F")}
 txt(e.d,16,y+6,8);
 txt(e.s&&e.e?e.s+"-"+e.e:"Bereitschaft",47,y+6,8);
 txt((String(e.r||"")+" / "+String(e.p||"")).slice(0,27),87,y+6,8);
@@ -94,7 +97,8 @@ txt(c.h.toFixed(2)+" h",153,y+6,8);
 txt(eur(c.t),174,y+6,8);
 txt("Grundlohn: "+eur(c.base)+"  |  25 % stpfl.: "+eur(c.b25)+"  |  25 % stfrei: "+eur(c.b25f),16,y+15,7);
 txt("40 % stfrei: "+eur(c.b40)+"  |  50 % So./Feiertag: "+eur(c.b50)+"  |  Bereitschaft: "+eur(c.sbv),16,y+22,7);
-y+=28;
+if(noteLines.length){doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(...dark);doc.text(noteLines,16,y+30)}
+y+=rowHeight;
 });
 if(y+12>285){doc.addPage();y=18}
 txt("Unverbindliche Berechnung, keine Lohnabrechnung.",13,y+6,8,false,gray);
